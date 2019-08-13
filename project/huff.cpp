@@ -1,152 +1,151 @@
-//============================================================================
-// Name        : huff.cpp
-// Author      : Ahmet Celik
-// Version     : 2009400111
-//============================================================================
-
-
 #include <vector>
 #include <deque>
 #include <iostream>
 #include <fstream>
-#include <sstream>
-#include <string>
 #include <map>
 #include <set>
 #include <algorithm>
+
 using namespace std;
 
-/*
- * Node structure for Huffman tree
- *
- * */
-struct node
+// Huffman Tree Node
+struct Node
 {
-	node(node * lft=0,node * rght=0,char ASCI=0,unsigned int frq=0):code()
-	{
-		left=lft; right=rght; ASCII=ASCI; freq=frq;
-	}
-    node(const node& other)
-    {
-         left=other.left; right=other.right; ASCII=other.ASCII; freq=other.freq; code=other.code;
-    }
-	node * left;
-	node * right;
-	char   ASCII;
-	unsigned int freq;
+    Node(Node *left = nullptr, Node *right = nullptr, char c = '\0', unsigned int f = 0) : left(left), right(right),
+                                                                                           c(c), f(f), code()
+    {}
+
+    Node(const Node &other) : left(other.left), right(other.right), c(other.c), f(other.f), code(other.code)
+    {}
+
+    Node *left;
+    Node *right;
+    char c;
+    unsigned int f;
     string code;
 };
 
 /**
- * comparison class to make min heap
+ * Comparison class to make min heap
+ * Descending order.
  */
-struct comp
+struct NodeDescendingComparisonByFrequency
 {
-    bool operator()(node* const frst,node* const scnd)
+    bool operator()(Node *const first, Node *const second)
     {
-		return frst->freq>scnd->freq;//to make min heap
-    }
-};
-/**
- * comparison class for set
- */
-struct comp2
-{
-    bool operator()(node*  frst,node* scnd)
-    {
-		return (unsigned int)(frst->ASCII)<(unsigned int)(scnd->ASCII);
+        return first->f > second->f;
     }
 };
 
 /**
- * converts single char to 8 bit
+ * Comparison class
  */
-string ascii2bin(const char&c)
+struct NodeAscendingComparisonByChar
 {
-	string bin;
-	for(unsigned int y = 0; y < sizeof(char) * 8; y++)
-	   bin.insert(bin.begin(), ( c & (1 << y) ) ? '1' : '0');
-	return bin;
+    bool operator()(Node *const first, Node *const second)
+    {
+        return (unsigned int) (first->c) < (unsigned int) (second->c);
+    }
+};
+
+/**
+ * Converts single char to 8 bit binary repr.
+ */
+string CharToBinaryCode(const char &c)
+{
+    string bin;
+    for (unsigned int y = 0; y < sizeof(char) * 8; y++)
+        bin.insert(bin.begin(), (c & (1 << y)) ? '1' : '0');
+    return bin;
 }
 
 /**
- * reads char stream to bit stream using previous method
+ * Reads input stream and encodes in binary repr.
  */
-void bin2str(ifstream & ifs,deque<char> & ss)
+void ReadBinaryCodesFromStream(ifstream &ifs, deque<char> &ss)
 {
-	char aux = 0;
-	while(ifs.good())
-	{
-		aux=ifs.get(); if(!ifs.good()) break;
-		string  tmp = ascii2bin(aux);
-		ss.insert(ss.end(),tmp.data(),tmp.data()+tmp.length());
-	}
-}
-//converts 8 bit to char
-char bin2ascii(const char*c)
-{
-	char ascii=0;
-	for(unsigned int y = 0; y <(sizeof(char) * 8)-1; y++)
-		ascii=(ascii|(c[y]-0x30))<<1;
-	return (ascii|(c[7]-0x30));
+    char aux = 0;
+    while (ifs.good())
+    {
+        aux = ifs.get();
+        if (!ifs.good())
+        {
+            break;
+        }
+        string tmp = CharToBinaryCode(aux);
+        ss.insert(ss.end(), tmp.data(), tmp.data() + tmp.length());
+    }
 }
 
-//write bit stream to file
-void str2bin(deque<char> & ss,ofstream & of)
+// converts binary repr to char
+char ConvertBinaryCodeToChar(const char *code)
 {
-	  while(ss.size()>0)
-	  {
-	    of<<bin2ascii(&ss[0]);
-	    ss.erase(ss.begin(),ss.begin()+8);
-	  }
+    char c = 0;
+    for (unsigned int y = 0; y < sizeof(char) * 7; y++)
+        c = (c | (code[y] - '0')) << 1;
+    return c | (code[7] - '0');
 }
 
-//write Huffman tree to file, also make encoder mapping
-void print(node*cur, map<char,string> &encoder,deque<char> & ss)
+// write bit stream to file
+void WriteBinaryCodesToStream(deque<char> &ss, ofstream &of)
 {
-    if(cur->left==0 )//only left and right links of leaf may be NULL
+    while (ss.size() > 0)
+    {
+        of << ConvertBinaryCodeToChar(&ss[0]);
+        ss.erase(ss.begin(), ss.begin() + 8);
+    }
+}
+
+// Serialize Huffman tree, also make encoder mapping
+void SerializeHuffmanTree(Node *n, map<char, string> &encoder, deque<char> &ss)
+{
+    //only left and right links of leaf may be NULL
+    if (n->left == nullptr)
     {
         ss.push_back('1');
-        string  tmp = ascii2bin(cur->ASCII);
-        ss.insert(ss.end(),tmp.data(),tmp.data()+tmp.length());
-        //cout<<cur->ASCII<<" "<<cur->freq<<endl;
-        encoder[cur->ASCII]=cur->code;
-    }
-    else
+        string tmp = CharToBinaryCode(n->c);
+        ss.insert(ss.end(), tmp.data(), tmp.data() + tmp.length());
+        //cout<<cur->c<<" "<<cur->f<<endl;
+        encoder[n->c] = n->code;
+    } else
     {
-       ss.push_back('0');
-	   cur->left->code.append(cur->code);
-	   cur->left->code.append("0");
-	   cur->right->code.append(cur->code);
-	   cur->right->code.append("1");
-       print(cur->left,encoder,ss);
-       print(cur->right,encoder,ss);
+        ss.push_back('0');
+        n->left->code.append(n->code);
+        n->left->code.append("0");
+        n->right->code.append(n->code);
+        n->right->code.append("1");
+        SerializeHuffmanTree(n->left, encoder, ss);
+        SerializeHuffmanTree(n->right, encoder, ss);
     }
 }
 
 /**
- * converse of printing tree
+ * Deserialize Huffman Tree
  */
-void read(node*cur,deque<char> & ss)
+void DeserializeHuffmanTree(Node *n, deque<char> &ss)
 {
-	char aux=ss.front(); ss.erase(ss.begin());
-    if(aux=='1' )
+    char aux = ss.front();
+    ss.erase(ss.begin());
+    if (aux == '1')
     {
-    	string tmp(ss.begin(),ss.begin()+8);
-    	cur->ASCII=bin2ascii(&tmp[0]);
-    	ss.erase(ss.begin(),ss.begin()+8);
-    }
-    else
+        string tmp(ss.begin(), ss.begin() + 8);
+        n->c = ConvertBinaryCodeToChar(&tmp[0]);
+        ss.erase(ss.begin(), ss.begin() + 8);
+    } else
     {
-       cur->left=new node(0,0,0,0);
-       cur->right=new node(0,0,0,0);
-       if(cur->left==0||cur->right==0){ cout<<"memory allocation error!"<<endl; exit(1);}
-	   cur->left->code.append(cur->code);
-	   cur->left->code.append("0");
-	   cur->right->code.append(cur->code);
-	   cur->right->code.append("1");
-       read(cur->left,ss);
-       read(cur->right,ss);
+        n->left = new Node();
+        n->right = new Node();
+        if (n->left == nullptr || n->right == nullptr)
+        {
+            cout << "memory allocation error!" << endl;
+            exit(1);
+        }
+        n->left->code.append(n->code);
+        n->left->code.append("0");
+        n->right->code.append(n->code);
+        n->right->code.append("1");
+        DeserializeHuffmanTree(n->left, ss);
+        DeserializeHuffmanTree(n->right, ss);
     }
 }
 
@@ -154,132 +153,195 @@ void read(node*cur,deque<char> & ss)
  * decode bit stream to bytes.
  * recursively traverse tree until leaf.
  */
-void read(node*cur,deque<char> & ss,ofstream&of)
+void DecodeHuffmanTree(Node *n, deque<char> &ss, ofstream &of)
 {
-    if(cur->left==0  )
+    if (n->left == nullptr)
     {
-    	of<<cur->ASCII;
-    }
-    else
+        of << n->c;
+    } else
     {
-       char aux=ss.front(); ss.erase(ss.begin());
-       if(aux=='0')
-    	   read(cur->left,ss,of);
-       else
-    	   read(cur->right,ss,of);
+        char aux = ss.front();
+        ss.erase(ss.begin());
+        if (aux == '0')
+        {
+            DecodeHuffmanTree(n->left, ss, of);
+        } else
+        {
+            DecodeHuffmanTree(n->right, ss, of);
+        }
     }
 }
 
-
-void encoder(char*filename,char*outname)
+void EncodeInputStream(ifstream &ifs, deque<char> &buffer, map<char, string> &encoder)
 {
- 	ifstream ifs ( filename , ifstream::in|ifstream::binary );
- 	if(!ifs.is_open()){ cout<<"file open error!"<<endl;  exit(1);}
- 	set<node*,comp2> nodeset;//to find frequencies
-	vector<node*> lst; //holds heap
-	while (ifs.good())//read file and puts to set
-	{
-		char aux = ifs.get();  if(!ifs.good()) break;
-		node* cand = new node(0,0,aux,1);
-		if(cand==0){ cout<<"memory allocation error!"<<endl; exit(1);}
-		pair<set<node*>::iterator,bool> ret=nodeset.insert(cand);
-		if(!ret.second){
-			delete cand;
-			(*(ret.first))->freq++;
-		}
-	}
-	for(set<node*>::iterator itr = nodeset.begin();itr!=nodeset.end();itr++)
-	{//to use heap push set elements to vector
-		lst.push_back(*itr);
-	}
-	nodeset.clear();
-    make_heap(lst.begin(),lst.end(),comp());
-    while(lst.size()>1)//pops two least element from heap and push new merged
-    {                  //of these nodes
-        pop_heap(lst.begin(),lst.end(),comp());
-        node* frst = lst.back(); lst.pop_back();
-        pop_heap(lst.begin(),lst.end(),comp());
-        node* second = lst.back(); lst.pop_back();
-        node* parent = new node(frst,second,0,frst->freq+second->freq);
-        if(parent==0){ cout<<"memory allocation error!"<<endl; exit(1);}
-        lst.push_back(parent);
-        push_heap(lst.begin(),lst.end(),comp());
-    }
-    deque<char> buffer;//buffer to hold bit stream
-    map<char,string> encoder;//huffman tree encodings
-    print(lst.front(),encoder,buffer);//write tree to file and set mapping
-
-    ifs.close();
-    ifs.open(filename , ifstream::in|ifstream::binary);
-    if(!ifs.is_open()){ cout<<"file open error!"<<endl;  exit(1);}
     while (ifs.good())
     {
-		char aux = ifs.get();  if(!ifs.good()) break;
-		string & tmp = encoder[aux];
-		buffer.insert(buffer.end(),tmp.data(),tmp.data()+tmp.length());
-	}
-    ofstream ofs ( outname , ofstream::out|ifstream::binary );
-    if(!ofs.is_open()){ cout<<"file write error!"<<endl;  exit(1);}
+        char aux = ifs.get();
+        if (!ifs.good())
+            break;
+        string &tmp = encoder[aux];
+        buffer.insert(buffer.end(), tmp.data(), tmp.data() + tmp.length());
+    }
+}
+
+void CalculateFrequencies(ifstream &ifs, set<Node*, NodeAscendingComparisonByChar> &nodesSortedByFrequencies)
+{
+    while (ifs.good()) //read file and puts to set
+    {
+        char aux = ifs.get();
+        if (!ifs.good())
+        {
+            break;
+        }
+        Node *candidate = new Node(nullptr, nullptr, aux, 1);
+        auto ret = nodesSortedByFrequencies.insert(candidate);
+        if (!ret.second)
+        {
+            delete candidate;
+            ++(*(ret.first))->f;
+        }
+    }
+}
+
+void BuildHuffmanTree(set<Node *, NodeAscendingComparisonByChar> &nodesSortedByFrequencies, vector<Node *> &nodes)
+{    //to use heap push set elements to vector
+    for (auto itr = nodesSortedByFrequencies.begin(); itr != nodesSortedByFrequencies.end(); itr++)
+    {
+        nodes.push_back(*itr);
+    }
+    nodesSortedByFrequencies.clear();
+    make_heap(nodes.begin(), nodes.end(), NodeDescendingComparisonByFrequency());
+    while (nodes.size() > 1)
+    {
+        //pops two least element from heap and push new merged
+        //of these nodes
+        pop_heap(nodes.begin(), nodes.end(), NodeDescendingComparisonByFrequency());
+        Node *first = nodes.back();
+        nodes.pop_back();
+        pop_heap(nodes.begin(), nodes.end(), NodeDescendingComparisonByFrequency());
+        Node *second = nodes.back();
+        nodes.pop_back();
+        Node *parent = new Node(first, second, '\0', first->f + second->f);
+        nodes.push_back(parent);
+        push_heap(nodes.begin(), nodes.end(), NodeDescendingComparisonByFrequency());
+    }
+}
+
+void Encoder(char *in_filename, char *out_filename)
+{
+    ifstream ifs(in_filename, ifstream::in | ifstream::binary);
+    if (!ifs.is_open())
+    {
+        cout << "file open error!" << endl;
+        exit(1);
+    }
+    set<Node*, NodeAscendingComparisonByChar> nodesSortedByFrequencies;
+    vector<Node*> nodes; //holds heap
+    CalculateFrequencies(ifs, nodesSortedByFrequencies);
+    ifs.close();
+
+    BuildHuffmanTree(nodesSortedByFrequencies, nodes);
+
+    deque<char> buffer; //buffer to hold bit stream
+    map<char, string> encoder; //huffman tree encodings
+    SerializeHuffmanTree(nodes.front(), encoder, buffer); //write tree to file and set mapping
+
+
+    ifs.open(in_filename, ifstream::in | ifstream::binary);
+    if (!ifs.is_open())
+    {
+        cout << "file open error!" << endl;
+        exit(1);
+    }
+    EncodeInputStream(ifs, buffer, encoder);
+
+    ofstream ofs(out_filename, ofstream::out | ifstream::binary);
+    if (!ofs.is_open())
+    {
+        cout << "file write error!" << endl;
+        exit(1);
+    }
     unsigned int length = buffer.size();
-    unsigned int trimmedsize = (length/8)*8;
-    unsigned int padding = length-trimmedsize;
-    if(padding!=0) padding = 8-padding;
-    for(;padding>0;padding--)  buffer.push_back('0');//padding
-    ofs.write((const char*) &length, sizeof(unsigned int));
-    str2bin(buffer,ofs);//write file
+    unsigned int trimmedLength = (length / 8) * 8;
+    unsigned int padding = length - trimmedLength;
+    if (padding != 0)
+    {
+        padding = 8 - padding;
+    }
+    while(padding > 0)
+    {
+        buffer.push_back('0');
+        --padding;
+    }
+    ofs.write((const char *) &length, sizeof(unsigned int));
+    WriteBinaryCodesToStream(buffer, ofs);
     ofs.close();
 }
 
-
-void decoder(char*filename,char*outname)
+void Decoder(char *in_filename, char *out_filename)
 {
-	node* root = new node(0,0,0,0);//huffman tree root
-	if(root==0){ cout<<"memory allocation error!"<<endl; exit(1);}
-	deque<char> buffer; //buffer of '1's and '0's,
-	ifstream ifs ( filename , ifstream::in|ifstream::binary );
-	if(!ifs.is_open()){ cout<<"file open error!"<<endl;  exit(1);}
-	unsigned int size; //compressed size
-	ifs.read((char*)& size, sizeof(unsigned int));
-	unsigned int trimmedsize = (size/8)*8;
-	unsigned int padding = size-trimmedsize;
-	if(padding!=0) padding = 8-padding;
-	bin2str(ifs,buffer);//read all file to buffer converting to bits
+    Node *root = new Node(); //huffman tree root
+    deque<char> buffer; //buffer of '1's and '0's,
+    ifstream ifs(in_filename, ifstream::in | ifstream::binary);
+    if (!ifs.is_open())
+    {
+        cout << "file open error!" << endl;
+        exit(1);
+    }
+    unsigned int length; //compressed size
+    ifs.read((char *) &length, sizeof(unsigned int));
+    unsigned int trimmedLength = (length / 8) * 8;
+    unsigned int padding = length - trimmedLength;
+    if (padding != 0)
+    {
+        padding = 8 - padding;
+    }
+    ReadBinaryCodesFromStream(ifs, buffer);//read all file to buffer converting to bits
 
-	for(;padding>0;padding--)  buffer.erase(buffer.end());//read padded 0's
+    while (padding > 0)
+    {
+        buffer.erase(buffer.end());
+        --padding;
+    }
 
-	ofstream ofs ( outname , ofstream::out|ofstream::binary );
-	if(!ofs.is_open()){ cout<<"file write error!"<<endl;  exit(1);}
+    ofstream ofs(out_filename, ofstream::out | ofstream::binary);
+    if (!ofs.is_open())
+    {
+        cout << "file write error!" << endl;
+        exit(1);
+    }
 
-	read(root,buffer);//read tree
+    DeserializeHuffmanTree(root, buffer);//read tree
 
-	while(buffer.size()>0)//decode and write file as readed from tree.
-	   read(root,buffer,ofs);
+    while (buffer.size() > 0) {
+        //decode and write file as readed from tree.
+        DecodeHuffmanTree(root, buffer, ofs);
+    }
 }
 
 /**
- * handles with arguments.
+ * Handles with arguments.
  */
-int main(int argc,char**argv){
-		if(argc==4&&argv[1][0]=='-')
-		{
-			if(argv[1][1]=='e')
-			{
-				encoder(argv[2],argv[3]);
-			}
-			else if(argv[1][1]=='d')
-			{
-				decoder(argv[2],argv[3]);
-			}
-			else
-			{
-				cout<<"Invalid arguments!"<<endl;
-				return 1;
-			}
+int main(int argc, char **argv)
+{
+    if (argc == 4 && argv[1][0] == '-')
+    {
+        if (argv[1][1] == 'e')
+        {
+            Encoder(argv[2], argv[3]);
+        } else if (argv[1][1] == 'd')
+        {
+            Decoder(argv[2], argv[3]);
+        } else
+        {
+            cout << "Invalid arguments!" << endl;
+            return 1;
+        }
 
-		}else{
-			cout<<"Invalid arguments!"<<endl;
-			return 1;
-		}
-        return 0;
+    } else
+    {
+        cout << "Invalid arguments!" << endl;
+        return 1;
+    }
+    return 0;
 }
-
